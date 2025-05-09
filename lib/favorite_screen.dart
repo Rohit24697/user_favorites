@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:user_favorites/widgets/user_tile.dart';
-import 'dart:convert';
-
-import 'models/user_model.dart';
-
+import 'package:user_favorites/services/sqlite_helper.dart'; // Import SQLiteService
+import 'package:user_favorites/services/sqlite_service.dart';
+import '../models/user_model.dart';
+import '../widgets/user_tile.dart';
+import 'home_screen.dart';
 
 class FavoriteScreen extends StatefulWidget {
   const FavoriteScreen({super.key});
@@ -22,27 +21,41 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
     loadFavorites();
   }
 
+  // Load favorite users from the SQLite database
   Future<void> loadFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
-    final favList = prefs.getStringList('favorites') ?? [];
+    final users = await SQLiteService.instance.getUsers(); // Fetch all favorite users from SQLite
     setState(() {
-      favorites = favList.map((e) => User.fromJson(json.decode(e))).toList();
+      favorites = users; // Set the state with the list of favorite users
     });
   }
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Favorite Users")),
+      appBar: AppBar(
+        title: const Text("Favorite Users"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.home),
+            onPressed: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const HomeScreen()),
+              );
+            },
+          )
+        ],
+      ),
       body: favorites.isEmpty
-          ? Center(child: Text("No favorites"))
+          ? const Center(child: Text("No favorites"))
           : ListView.builder(
         itemCount: favorites.length,
-        itemBuilder: (_, i) {
+        itemBuilder: (BuildContext context, int i) {
           return UserTile(
             user: favorites[i],
-            isFavorite: true,
-            onToggleFavorite: () {}, // No toggle in favorite screen
+            isFavorite: true, // No toggle on favorites screen
+            onToggleFavorite: () {}, // Disable toggle in favorites screen
           );
         },
       ),

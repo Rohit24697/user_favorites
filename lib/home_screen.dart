@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:user_favorites/services/api_service.dart';
-import 'package:user_favorites/widgets/user_tile.dart';
-import 'dart:convert';
-
+import '../models/user_model.dart';
+import '../services/api_service.dart';
+import '../services/sqlite_service.dart'; // Handles local storage of favorite users
+import '../widgets/user_tile.dart';
 import 'favorite_screen.dart';
-import 'models/user_model.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,74 +13,93 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<User> users = [];
-  Set<int> favoriteIds = {};
-  Map<int, User> favoriteUsers = {};
+  List<User> users = []; // List to store all users fetched from API
+  Set<int> favoriteIds = {}; // Set to keep track of IDs of favorite users
 
   @override
   void initState() {
     super.initState();
-    loadUsers();
-    loadFavorites();
+    loadUsers();     // Load users from API when the screen is initialized
+    loadFavorites(); // Load favorite users from SQLite database
   }
 
+  // Fetch users from the API (including both pages)
   Future<void> loadUsers() async {
-    final data = await UserService.fetchUsers();
-    setState(() => users = data);
+    try {
+      final data = await UserService.fetchUsers(); // Call API to get users
+      setState(() {
+        users = data; // Update UI with the fetched users
+      });
+    } catch (e) {
+      print("Error loading users: $e");
+      // Show error message if API call fails
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to load users")),
+      );
+    }
   }
 
+  // Load favorite users from local SQLite database
   Future<void> loadFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
-    final favList = prefs.getStringList('favorites') ?? [];
-    final favMap = {
-      for (var jsonStr in favList)
-        User.fromJson(json.decode(jsonStr)).id: User.fromJson(json.decode(jsonStr))
-    };
+    final users = await SQLiteService.instance.getUsers(); // Get favorite users
     setState(() {
-      favoriteIds = favMap.keys.toSet();
-      favoriteUsers = favMap;
+      // Save their IDs in a Set for quick lookup
+      favoriteIds = users.map((user) => user.id).toSet();
     });
   }
 
+  // Add or remove a user from favorites
   Future<void> toggleFavorite(User user) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (favoriteIds.contains(user.id)) {
-      favoriteIds.remove(user.id);
-      favoriteUsers.remove(user.id);
-    } else {
-      favoriteIds.add(user.id);
-      favoriteUsers[user.id] = user;
-    }
-    final list = favoriteUsers.values.map((u) => json.encode(u.toJson())).toList();
-    await prefs.setStringList('favorites', list);
-    setState(() {});
+    final isFav = favoriteIds.contains(user.id); // Check if user is already favorite
+
+    // Update UI immediately
+    setState(() {
+      if (isFav) {
+        favoriteIds.remove(user.id); // Unfavorite
+      } else {
+        favoriteIds.add(user.id); // Mark as favorite
+      }
+    });
+
+    // Update favorite status in the database
+    await SQLiteService.instance.toggleFavorite(user);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("All Users"),
+        title: const Text("All Users"),
         actions: [
           IconButton(
-            icon: Icon(Icons.favorite),
-            onPressed: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => FavoriteScreen())),
-          )
+            icon: const Icon(Icons.favorite),
+            onPressed: () {
+              // Navigate to FavoriteScreen when favorite icon is tapped
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const FavoriteScreen()),
+              ).then((_) => loadFavorites()); // Reload favorites when back
+            },
+          ),
         ],
       ),
       body: users.isEmpty
-          ? Center(child: CircularProgressIndicator())
-          : ListView.builder(
-        itemCount: users.length,
-        itemBuilder: (_, i) {
-          final user = users[i];
-          return UserTile(
-            user: user,
-            isFavorite: favoriteIds.contains(user.id),
-            onToggleFavorite: () => toggleFavorite(user),
-          );
-        },
+      // Show loading spinner while users are being fetched
+          ? const Center(child: CircularProgressIndicator())
+      // Once loaded, show users in a list with pull-to-refresh
+          : RefreshIndicator(
+        onRefresh: loadUsers,
+        child: ListView.builder(
+          itemCount: users.length,
+          itemBuilder: (_, i) {
+            final user = users[i];
+            return UserTile(
+              user: user,
+              isFavorite: favoriteIds.contains(user.id), // Show if user is favorite
+              onToggleFavorite: () => toggleFavorite(user), // Handle tap
+            );
+          },
+        ),
       ),
     );
   }

@@ -28,11 +28,17 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Both widgets are placed together for simultaneous rendering
             Image.asset("assets/nextDay_logo.jpg"),
             const SizedBox(height: 20),
             const Text(
-              'Developed by Rohit Hegade',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+              "Developed by Rohit Hegade",
+              style: TextStyle(
+                fontSize: 16.0,
+                fontWeight: FontWeight.bold,
+                fontStyle: FontStyle.italic,
+                color: Colors.yellow,
+              ),
             ),
           ],
         ),
